@@ -1,0 +1,6 @@
+[submodule "components/cwhttpd"]
+	path = components/cwhttpd
+	url = https://github.com/jkent/cwhttpd
+[submodule "components/frogfs"]
+	path = components/frogfs
+	url = https://github.com/jkent/frogfs
