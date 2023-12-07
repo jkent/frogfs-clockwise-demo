@@ -1,3 +1,5 @@
+#include "sdkconfig.h"
+
 #include <dirent.h>
 #include <limits.h>
 #include <stdarg.h>
@@ -7,7 +9,6 @@
 
 #include "cwhttpd/httpd.h"
 #include "frogfs/frogfs.h"
-#include "frogfs/format.h"
 
 
 #define CHUNK_SIZE 1024U
@@ -191,8 +192,8 @@ static cwhttpd_status_t api_delete(cwhttpd_conn_t *conn)
 }
 
 typedef struct api_load_data_t {
-    int dirlen[FROGFS_MAX_FLAT_DEPTH];
-    DIR *dirs[FROGFS_MAX_FLAT_DEPTH];
+    int dirlen[CONFIG_FROGFS_MAX_FLAT_DEPTH];
+    DIR *dirs[CONFIG_FROGFS_MAX_FLAT_DEPTH];
     char path[PATH_MAX];
 } api_load_data_t;
 
@@ -251,7 +252,7 @@ static cwhttpd_status_t api_load(cwhttpd_conn_t *conn)
                 cwhttpd_send(conn, cJSON_PrintUnformatted(root), -1);
                 cJSON_Delete(root);
             } else if (dirent->d_type == DT_DIR &&
-                    depth < FROGFS_MAX_FLAT_DEPTH - 1) {
+                    depth < CONFIG_FROGFS_MAX_FLAT_DEPTH - 1) {
                 data->dirs[depth + 1] = opendir(data->path);
                 if (data->dirs[depth + 1] == NULL) {
                     continue;
