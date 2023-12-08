@@ -192,18 +192,17 @@ static cwhttpd_status_t api_delete(cwhttpd_conn_t *conn)
 }
 
 typedef struct api_load_data_t {
-    int dirlen[CONFIG_FROGFS_MAX_FLAT_DEPTH];
-    DIR *dirs[CONFIG_FROGFS_MAX_FLAT_DEPTH];
     char path[PATH_MAX];
 } api_load_data_t;
 
 static cwhttpd_status_t api_load(cwhttpd_conn_t *conn)
 {
     api_load_data_t *data = conn->user;
-    int len, depth = 0;
+    int len;
     struct dirent *dirent;
     struct stat st;
     bool first = true;
+    DIR *dir;
     cJSON *root;
 
     if (data == NULL) {
@@ -215,10 +214,11 @@ static cwhttpd_status_t api_load(cwhttpd_conn_t *conn)
         conn->user = data;
     }
 
-    data->dirlen[0] = strlcpy(data->path, conn->route->argv[0],
-            sizeof(data->path));
-    data->dirs[0] = opendir(data->path);
-    if (data->dirs[0] == NULL) {
+    len = strlcpy(data->path, conn->route->argv[0], sizeof(data->path) - 1);
+    data->path[len++] = '/';
+    data->path[len] = '\0';
+    dir = opendir(data->path);
+    if (dir == NULL) {
         return error(conn, "opendir() returned NULL");
     }
 
@@ -227,39 +227,29 @@ static cwhttpd_status_t api_load(cwhttpd_conn_t *conn)
     cwhttpd_send(conn, "[", -1);
 
     while (true) {
-        dirent = readdir(data->dirs[depth]);
+        dirent = readdir(dir);
         if (dirent == NULL) {
-            closedir(data->dirs[depth]);
-            if (depth-- == 0) {
-                break;
+            closedir(dir);
+            break;
+        }
+
+        strlcpy(data->path + len, dirent->d_name, sizeof(data->path) - len);
+
+        if (stat(data->path, &st) >= 0) {
+            if (!first) {
+                cwhttpd_send(conn, ",", -1);
             }
-        } else {
-            len = data->dirlen[depth] + strlcpy(data->path +
-                    data->dirlen[depth], dirent->d_name, sizeof(data->path) -
-                    data->dirlen[depth]);
-            if (dirent->d_type == DT_REG && (stat(data->path, &st) == 0)) {
-                if (!first) {
-                    cwhttpd_send(conn, ",", -1);
-                }
-                first = false;
-                root = cJSON_CreateObject();
-                cJSON_AddItemToObject(root, "path",
-                        cJSON_CreateString(&data->path[data->dirlen[0]]));
-                cJSON_AddNumberToObject(root, "size", st.st_size);
-                if (st.st_spare4[0] == FROGFS_MAGIC) {
-                    cJSON_AddTrueToObject(root, "frogfs");
-                }
-                cwhttpd_send(conn, cJSON_PrintUnformatted(root), -1);
-                cJSON_Delete(root);
-            } else if (dirent->d_type == DT_DIR &&
-                    depth < CONFIG_FROGFS_MAX_FLAT_DEPTH - 1) {
-                data->dirs[depth + 1] = opendir(data->path);
-                if (data->dirs[depth + 1] == NULL) {
-                    continue;
-                }
-                depth++;
-                data->dirlen[depth] = len;
+            first = false;
+
+            root = cJSON_CreateObject();
+            cJSON_AddItemToObject(root, "path",
+                    cJSON_CreateString(&data->path[len]));
+            cJSON_AddNumberToObject(root, "size", st.st_size);
+            if (st.st_spare4[0] == FROGFS_MAGIC) {
+                cJSON_AddTrueToObject(root, "frogfs");
             }
+            cwhttpd_send(conn, cJSON_PrintUnformatted(root), -1);
+            cJSON_Delete(root);
         }
     }
 
